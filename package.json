@@ -1,0 +1,29 @@
+{
+  "name": "hogehoge",
+  "description": "a 'json' command for massaging JSON on the command line",
+  "version": "1.2.3",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/xxx/yyy"
+  },
+  "author": "oijflzjfke",
+  "bin": {
+    "json": "./lib/hoge.js",
+    "json4": "./lib/piyo.js"
+  },
+  "main": "./lib/jsontool.js",
+  "man": "./man/man1/json.1",
+  "scripts": {
+    "test": "make test"
+  },
+  "engines": ["node >=0.4.0"],
+  "keywords": ["json", "jsontool", "filter", "command", "shell"],
+  "devDependencies": {
+    "uglify-js": "1.1.x",
+    "nodeunit": "0.7.x",
+    "ansidiff": "1.0",
+    "ben": "0.0.x",
+    "async": "0.1.22",
+    "semver": "1.1.0"
+  }
+}

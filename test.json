@@ -1,0 +1,7 @@
+{"hoge": [
+    {"var1": "foo1", "var2": "bar1", "var3": "baz1"},
+    {"var1": "foo2", "var2": "bar2", "var3": "baz2"},
+    {"var1": "foo3", "var2": "bar3", "var3": "baz3"},
+    {"var1": "foo4", "var2": "bar4", "var3": "baz4"},
+    {"var1": "foo5", "var2": "bar5", "var3": "baz5"}
+]}
