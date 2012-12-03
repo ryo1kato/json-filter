@@ -1,7 +1,22 @@
-{"hoge": [
-    {"var1": "foo1", "var2": "bar1", "var3": {"baz": [ 1, 2, 3] }},
-    {"var1": "foo2", "var2": "bar2", "var3": {"baz": [ 11, 22, 33] }},
-    {"var1": "foo3", "var2": "bar3", "var3": {"baz": [ 111,222,333] }},
-    {"var1": "foo4", "var2": "bar4", "var3": {"baz": [ 4, 5, 6] }},
-    {"var1": "foo5", "var2": "bar5", "var3": {"baz": [ 44, 55, 66] }}
-]}
+{
+    "hoge": [
+        {"var1": "foo1", "var2": "bar1", "var3": {"baz": [ 1, 2, 3] }},
+        {"var1": "foo2", "var2": "bar2", "var3": {"baz": [ 11, 22, 33] }},
+        {"var1": "foo3", "var2": "bar3", "var3": {"baz": [ 111,222,333] }},
+        {"var1": "foo4", "var2": "bar4", "var3": {"baz": [ 4, 5, 6] }},
+        {"var1": "foo5", "var2": "bar5", "var3": {"baz": [ 44, 55, 66] }}
+    ],
+    "piyo": {"pvar1": "pfoo1", "pvar2": "pbar1"},
+    "huga": [
+        {"var1": "foo1", "var2": {"one": "1",    "two": "2"}},
+        {"var1": "foo2", "var2": {"one": "ichi", "two": "ni"}},
+        {"var1": "foo3", "var2": {"one": "uno",  "two": "dos"}}
+    ],
+    "dumb": [ 11, 22, 33, 44, 55, 66, 77, 88 ],
+    "table": [
+        {"var1": "val1-1", "var2": "val2-1"},
+        {"var1": "val1-2", "var2": "val2-2"},
+        {"var1": "val1-3", "var2": "val2-3"},
+        {"var1": "val1-4", "var2": "val2-4"}
+    ]
+}
