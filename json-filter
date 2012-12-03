@@ -8,7 +8,7 @@
 
 VERSION = (0,1)
 USAGE = """\
-%prog [OPTIONS] [JSON_DITDICT]
+%prog [OPTIONS] [FILENAME] [JSON_DITDICT]
 DESCRIPTION
   Simple JSON analyzer and filter with dotdict notation + wildcard support.
 JSON_DOTDICT 
@@ -30,6 +30,7 @@ JSON_DOTDICT
 #
 
 ##############################################################################
+import os
 import sys
 import re
 import optparse
@@ -63,7 +64,6 @@ re_dotdict_multi = re.compile("^\{(%(re_node)s(,%(re_node)s)*)\}$" % re_node)
 
 
 def dotdictget(myjson, dotdict):
-    print "dotdictget: " + dotdict + " (" + str(type(myjson)) + ")"
     node_str, _, rest = dotdict.partition('.')
 
     single_node = re_dotdict.match(node_str)
@@ -157,7 +157,7 @@ def list2csv(mylist, filter_columns=None, print_header=True, escape=True):
 
 ##############################################################################
 
-def main():
+def myparser(argv):
     ## Option Parser
     parser = optparse.OptionParser(
         usage=USAGE,
@@ -171,23 +171,41 @@ def main():
         action="store_true",
         help="Print header for Comma Separated Value output.")
 
-    (opt, args) = parser.parse_args(sys.argv)
+    (opt, args) = parser.parse_args(argv)
+    return (opt, args) 
 
 
-    ## Load JSON txt
-    myjson = json.load(sys.stdin)
 
-
-    ## ...and print
-    if len(sys.argv) < 2:
-        # if no dotdict path specified, dump them all
-        print_json( myjson, csv=opt.csv )
-    else:
-        obj = dotdictget(myjson, sys.argv[1])
-        if len(obj) == 0:
-             raise ValueError("No matching JSON attribute found in the input")
+def json_filter(args):
+    if len(args) == 0:
+        myjson = json.load(sys.stdin)
+    elif len(args) == 1:
+        if os.path.exists(args[0]):
+            myjson = json.load( open(args[0]) )
         else:
-            print_json(obj, csv=opt.csv)
+            myjson = dotdictget(  json.load(sys.stdin), args[0]   )
+    elif len(args) == 2:
+        myjson = dotdictget(  json.load(open(args[0])), args[1]   )
+    else:
+        sys.stderr.write("Too many (%d) arguments\n"%len(args))
+        sys.exit(1)
+
+    if len(myjson) == 0:
+         raise ValueError("No matching JSON attribute found in the input")
+
+    return myjson
+
+
+
+def main():
+    (opt, args) = myparser(sys.argv[1:])
+
+    try:
+        myjson = json_filter(args)
+    except KeyboardInterrupt:
+        sys.exit(1)
+
+    print_json(myjson, csv=opt.csv)
 
 
 
