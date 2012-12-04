@@ -15,7 +15,8 @@ DESCRIPTION
 JSON_DOTDICT 
   attr1.attr2[999].attr3
   attr1.attr2[*].attr3
-  attr1.*.attr3
+  attr1.attr2.attr3(attr4=val4)
+  attr1.attr2.attr3.attr4(=val4)
 \
 """
 
@@ -59,6 +60,7 @@ def is_rawtype(obj):
 
 
 ##############################################################################
+
 re_name      = "([A-Za-z]\w*)"    # group 1
 re_subscript = "(\[(\d+|\*)\])?"  # group 2 and 3
 re_condition = "(\([=<>]\w+(\|[=<>]\w+)*\))?"
@@ -66,7 +68,6 @@ re_node      = {'re_node': re_name + re_subscript + re_condition}
 
 re_dotdict    = re.compile("^%(re_node)s$" % re_node)
 re_dotdict_multi = re.compile("^\{(%(re_node)s(,%(re_node)s)*)\}$" % re_node)
-
 
 
 def dotdictget(myjson, dotdict):
@@ -82,23 +83,24 @@ def dotdictget(myjson, dotdict):
     else:
         raise ValueError("Malformed JSON object path")
 
-    if isinstance(myjson, list):
-        return [ dotdictget2(j, keys, rest) for j in myjson ]
-    else:
-        return dotdictget2(myjson, keys, rest)
+    parsed_keys = []
+    for k in keys:
+        parsed = re_dotdict.match(k)
+        parsed_keys.append(( parsed.group(1), parsed.group(3), parsed.group(4) ))
 
+    if isinstance(myjson, list):
+        return [ _dotdictget(j, parsed_keys, rest) for j in myjson ]
+    else:
+        return _dotdictget(myjson, parsed_keys, rest)
 
 
 # handle (multiple) path name and conditions
-def dotdictget2(myjson, keys, rest):
-
+def _dotdictget(myjson, parsed_keys, rest):
     filtered = dict()
-
-    for key in keys:
-        parsed = re_dotdict.match(key)
-        name       = parsed.group(1)
-        subscript  = parsed.group(3)
-        conditions = parsed.group(4) # FIXME: not implemented yet.
+    for pk in parsed_keys:
+        name       = pk[0]
+        subscript  = pk[1]
+        conditions = pk[2] # FIXME: not implemented yet.
 
         rawobj = myjson[name]
 
@@ -135,7 +137,6 @@ def print_json_pretty(obj):
             print item
     else:
         print json.dumps(obj, indent=4)
-
 
 
 def print_csv_dict(myDictList, filter_columns=None, escape=True):
@@ -193,7 +194,7 @@ def print_csv(mylist, filter_columns=None, escape=True):
 
 ##############################################################################
 
-def myparser(argv):
+def myoptparse(argv):
     ## Option Parser
     parser = optparse.OptionParser(
         usage=USAGE,
@@ -223,7 +224,6 @@ def myparser(argv):
     return (opt, args) 
 
 
-
 def json_filter(args):
     if len(args) == 0:
         myjson = json.load(sys.stdin)
@@ -244,10 +244,9 @@ def json_filter(args):
     return myjson
 
 
-
 def main():
     try:
-        (opt, args) = myparser(sys.argv[1:])
+        (opt, args) = myoptparse(sys.argv[1:])
 
         myjson = json_filter(args)
 
