@@ -125,16 +125,30 @@ def _dotdictget(myjson, parsed_keys, rest):
 
 ##############################################################################
 
-def print_json_pretty(obj):
-    """If obj is a simple array or raw data type, print as text
-    otherwise dump it as JSON.
+def print_json_pretty(obj, force=False):
+    """If obj is simply an array or raw data type, or a dict with
+    only key-value pair in it, print as text.
+    Otherwise dump it as JSON.
     """
     if is_rawtype(obj):
         print obj
-    elif isinstance(obj, list) and json == False \
-         and len(obj) == len([i for i in obj if is_rawtype(i)]):
-        for item in obj:
-            print item
+    elif isinstance(obj, list):
+        if all([ is_rawtype(i) for i in obj ]):
+            for item in obj:
+                print item
+        elif all([ isinstance(i, dict) and len(i.keys()) == 1 and is_rawtype(i.values()[0])
+                 for i in obj ]):
+            for one_item_dict in obj:
+                print one_item_dict.values()[0]
+        elif not force:
+            print json.dumps(obj, indent=4)
+        else:
+            # failed to pretty-print the object and need to back-track
+            return True
+    elif isinstance(obj, dict) and len(obj.keys()) == 1:
+        # if the obj is dict with one key, try to pretty the inner obj.
+        if print_json_pretty( obj.values()[0], force=True ):
+            print json.dumps(obj, indent=4)
     else:
         print json.dumps(obj, indent=4)
 
@@ -225,37 +239,46 @@ def myoptparse(argv):
 
 
 def json_filter(args):
+    infile  = sys.stdin
+    dotdict = None
     if len(args) == 0:
-        myjson = json.load(sys.stdin)
+        pass
     elif len(args) == 1:
         if os.path.exists(args[0]):
-            myjson = json.load( open(args[0]) )
+            infile  = open(args[0]) 
         else:
-            myjson = dotdictget(  json.load(sys.stdin), args[0]   )
+            dotdict = args[0]
     elif len(args) == 2:
-        myjson = dotdictget(  json.load(open(args[0])), args[1]   )
+        infile  = open(args[0]) 
+        dotdict = args[1]
     else:
         sys.stderr.write("Too many (%d) arguments\n"%len(args))
         sys.exit(1)
 
-    if len(myjson) == 0:
+    if dotdict:
+        myjson = dotdictget( json.load(infile), dotdict )
+    else:
+        myjson = json.load( infile )
+
+
+    if dotdict and len(myjson) == 0:
          raise ValueError("No matching JSON attribute found in the input")
 
-    return myjson
+    return (myjson, dotdict)
 
 
 def main():
     try:
         (opt, args) = myoptparse(sys.argv[1:])
-
-        myjson = json_filter(args)
+        (myjson, dotdict) = json_filter(args)
 
         if opt.outformat == OutFormat.CSV:
-            firstkey = myjson.keys()[0]
-            mylist = myjson[firstkey]
-            print_csv( mylist )
+            #print json.dumps(myjson, indent=4)
+            #for row in json2table( myjson, dotdict ):
+            #    print ",".join(row)
+            pass
         elif opt.outformat == OutFormat.JSON:
-            print json.dumps(json, indent=4)
+            print json.dumps(myjson, indent=4)
         else:
             print_json_pretty(myjson)
 

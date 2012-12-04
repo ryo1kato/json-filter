@@ -18,5 +18,13 @@
         {"var1": "val1-2", "var2": "val2-2"},
         {"var1": "val1-3", "var2": "val2-3"},
         {"var1": "val1-4", "var2": "val2-4"}
-    ]
+    ],
+    "single1": {
+        "single2_1": {
+            "single3": [ "one", "two", "three" ]
+        },
+        "single2_2": {
+            "single3_2": "justdata"
+        }
+    }
 }
