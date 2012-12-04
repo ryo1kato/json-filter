@@ -22,8 +22,10 @@ JSON_DOTDICT
 
 #
 # TODO
+#   * top-level array
 #   * CSV output
 #   * Better error and exception handling
+#   * '*' wildcard for node name 
 #   * Unit test
 #   * Multiple subscript / range support for list (subscript_str)
 #
@@ -31,6 +33,7 @@ JSON_DOTDICT
 #   * Not for big data; this script loads entire input into memory as
 #     objects (using json.load() method), thus input must hit into
 #     your machines' RAM.
+#   * Nested arrays are not supported
 #
 
 ##############################################################################
