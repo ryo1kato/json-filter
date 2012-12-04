@@ -20,11 +20,8 @@
         {"var1": "val1-4", "var2": "val2-4"}
     ],
     "single1": {
-        "single2_1": {
-            "single3": [ "one", "two", "three" ]
-        },
-        "single2_2": {
-            "single3_2": "justdata"
-        }
+        "single2": { "single3": [ "one", "two", "three" ] },
+        "single2_2": { "single3_2": "justdata" },
+        "single2_3": { "single3_3": {"some": "complex", "data": "structure"} }
     }
 }

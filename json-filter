@@ -150,8 +150,14 @@ def print_json_pretty(obj, force=False):
             return True
     elif isinstance(obj, dict) and len(obj.keys()) == 1:
         # if the obj is dict with one key, try to pretty the inner obj.
+        # FIXME for 'single1.single2_3.single3_3'
         if print_json_pretty( obj.values()[0], force=True ):
-            print json.dumps(obj, indent=4)
+            if force:
+                return True
+            else:
+                print json.dumps(obj, indent=4)
+    elif force:
+        return True
     else:
         print json.dumps(obj, indent=4)
 
