@@ -22,15 +22,13 @@ JSON_DOTDICT
 
 #
 # TODO
-#   * top-level array
+#   * Better error and exception handling / ignore DotDictNoMatch(?)
 #   * CSV output
-#   * Better error and exception handling
-#   * '*' wildcard for node name
 #   * Unit test
 #   * Multiple subscript / range support for list (subscript_str)
 #
 # BUGS & KNOWN ISSUES
-#   * Not for big data; this script loads entire input into memory as
+#   * Not good for big data; this script loads entire input into memory as
 #     objects (using json.load() method), thus input must hit into
 #     your machines' RAM.
 #   * Nested arrays are not supported
@@ -69,14 +67,13 @@ def is_rawtype(obj):
 # when name1 and/or name2 is an array.
 
 
-
 def debug(msg):
     print "DEBUG: ", msg
     pass
 
 res = {
         "delim": "[\[\{\.]",
-        "name":  ".([A-Za-z]\w*)",
+        "name":  ".([A-Za-z]\w*|\*)",
         "index": "(?:\[(?P<index>\d+|\*)\])"
 }
 re_delim = re.compile("^%(delim)s"%res)
@@ -86,9 +83,12 @@ re_index = re.compile("^%(index)s(?P<rest>%(delim)s.+)*$" % res)
 
 class DotDictError(Exception):
     def __init__(self, msg=''):
-        self.msg = msg
+        if isinstance(msg, list):
+            self.msg = "".join(msg)
+        else:
+            self.msg = msg
     def __str__(self):
-        return self.msg
+        return self.msg.__str__()
 
 class DotDictMalformed(DotDictError):
     pass
@@ -109,17 +109,49 @@ def dotdictget(myjson, dotdict):
     return _dotdictget(myjson, normalized_dotdict, [])
 
 
-
 def _dotdictget_dict(mydict, name, rest, traversed=[]):
-    trace = traversed+["."+name]
+    trace = traversed + ["."+name]
     try:
-        if isinstance(mydict, list):
-            # assume shorthand notation; name1.name2 is
-            # equivalent to name1[*].name2 if name1 is a list.
-            subtree = [ _dotdictget(j[name], rest, trace) for j in mydict ]
+        if name == '*':
+            if isinstance(mydict, list):
+                trace = traversed + ["[*]"]
+                wildcard_expanded = []
+                for myjson in mydict:
+                    try:
+                        subtree = _dotdictget_dict(myjson, name, rest, trace)
+                        wildcard_expanded.append( subtree )
+                    except DotDictNoMatch:
+                        pass
+                if wildcard_expanded:
+                    return wildcard_expanded
+                else:
+                    raise DotDictNoMatch(trace)
+            elif isinstance(mydict, dict):
+                wildcard_expanded = {}
+                for n in mydict.keys():
+                    try:
+                        wildcard_expanded[n] = _dotdictget(mydict[n], rest, trace)
+                    except DotDictNoMatch:
+                        pass
+                if wildcard_expanded:
+                    return wildcard_expanded
+                else:
+                    raise DotDictNoMatch(trace)
+            else:
+                raise DotDictNoMatch(trace)
+
         else:
-            subtree = _dotdictget(mydict[name], rest, trace)
-        return {name: subtree}
+            if isinstance(mydict, list):
+                trace = traversed + ["[*]", "."+name]
+                # assume shorthand notation; name1.name2 is
+                # equivalent to name1[*].name2 if name1 is a list.
+                if any([is_rawtype(j) for j in mydict]):
+                    raise DotDictNoMatch(trace)
+                return [ {name: _dotdictget(j[name], rest, trace)} for j in mydict ]
+            elif isinstance(mydict, dict):
+                return {name: _dotdictget(mydict[name], rest, trace)}
+            else:
+                raise DotDictNoMatch(trace)
     except KeyError:
         raise DotDictNoMatch(trace)
 
@@ -138,6 +170,9 @@ def _dotdictget_list(mylist, index_s, rest, traversed=[]):
                 raise DotDictNoMatch(trace)
     else:
         raise DotDictNoMatch(trace)
+
+def _dotdictget_multi(myjson, dotdict, traversed):
+    pass
 
 
 def _dotdictget(myjson, dotdict, traversed=[]):
@@ -305,7 +340,14 @@ def json_filter(args):
         sys.exit(1)
 
     if dotdict:
-        myjson = dotdictget( json.load(infile), dotdict )
+        try:
+            myjson = dotdictget( json.load(infile), dotdict )
+        except DotDictNoMatch as e:
+            sys.stderr.write("No matching object found for '%s'\n"%e)
+            sys.exit(1)
+        except DotDictMalformed as e:
+            sys.stderr.write("Malformed DotDict notation: '%s' in '%s'\n" %(e, dotdict))
+            sys.exit(1)
     else:
         myjson = json.load( infile )
 
