@@ -110,6 +110,36 @@ def dotdictget(myjson, dotdict):
 
 
 
+def _dotdictget_dict(mydict, name, rest, traversed=[]):
+    trace = traversed+["."+name]
+    try:
+        if isinstance(mydict, list):
+            # assume shorthand notation; name1.name2 is
+            # equivalent to name1[*].name2 if name1 is a list.
+            subtree = [ _dotdictget(j[name], rest, trace) for j in mydict ]
+        else:
+            subtree = _dotdictget(mydict[name], rest, trace)
+        return {name: subtree}
+    except KeyError:
+        raise DotDictNoMatch(trace)
+
+
+def _dotdictget_list(mylist, index_s, rest, traversed=[]):
+    trace = traversed+["[%s]"%index_s]
+    if isinstance(mylist,list):
+        if index_s == '*':
+            return [ _dotdictget(j, rest, trace) for j in mylist ]
+        else:
+            index = int(index_s)
+            try:
+                subtree = _dotdictget(mylist[index], rest, trace)
+                return [subtree]
+            except IndexError:
+                raise DotDictNoMatch(trace)
+    else:
+        raise DotDictNoMatch(trace)
+
+
 def _dotdictget(myjson, dotdict, traversed=[]):
     debug("dotdict: '%s'"%dotdict)
     if not dotdict or dotdict == '':
@@ -122,102 +152,18 @@ def _dotdictget(myjson, dotdict, traversed=[]):
         if m_name:
             name = m_name.group(1)
             rest = m_name.group('rest')
-            trace = traversed+["."+name]
-            try:
-                if isinstance(myjson, list):
-                    # equivalent to [*].name
-                    subtree = [ _dotdictget(j[name], rest, trace) for j in myjson ]
-                else:
-                    subtree = _dotdictget(myjson[name], rest, trace)
-                return {name: subtree}
-            except KeyError:
-                raise DotDictNoMatch(trace)
+            return _dotdictget_dict(myjson, name, rest, traversed)
 
         elif m_index:
             index_s = m_index.group(1)
             rest  = m_index.group('rest')
-            trace = traversed+["[%s]"%index_s]
-            if not isinstance(myjson,list):
-                raise DotDictNoMatch(trace)
-            try:
-                if index_s == '*':
-                    return [ _dotdictget(j, rest, trace) for j in myjson ]
-                else:
-                    index = int(index_s)
-                    subtree = _dotdictget(myjson[index], rest, trace)
-                    return [subtree]
-            except IndexError:
-                raise DotDictNoMatch(trace)
+            return _dotdictget_list(myjson, index_s, rest, traversed)
 
         else:
             raise DotDictMalformed(dotdict)
 
 
 
-# def dotdictget(myjson, dotdict):
-#     node_str, _, rest = dotdict.partition('.')
-#     m = re_subscript.match(node_str)
-#     if isinstance(myjson, list) and m:
-#         myjson2 = [ myjson[ int(m.group(2)) ] ]
-#         return _dotdictget( myjson2, rest )
-#     else:
-#         return _dotdictget( myjson, dotdict )
-# 
-# def _dotdictget(myjson, dotdict):
-#     """multi-node expression and array expander
-#     """
-#     node_str, _, rest = dotdict.partition('.')
-# 
-#     single_node = re_dotdict.match(node_str)
-#     multi_node  = re_dotdict_multi.match(node_str)
-# 
-#     if single_node:
-#         keys = [ node_str ]
-#     elif multi_node:
-#         keys = multi_node.group(1).split(',')
-#     elif dotdict == '':
-#         return myjson
-#     else:
-#         raise ValueError("Malformed JSON object path")
-# 
-#     parsed_keys = []
-#     for k in keys:
-#         parsed = re_dotdict.match(k)
-#         parsed_keys.append(( parsed.group(1), parsed.group(2), parsed.group(3) ))
-# 
-#     if isinstance(myjson, list):
-#         return [ _dotdictget2(j, parsed_keys, rest) for j in myjson ]
-#     else:
-#         return _dotdictget2(myjson, parsed_keys, rest)
-# 
-
-# handle (multiple) path name and conditions
-def _dotdictget2(myjson, parsed_keys, rest):
-    filtered = dict()
-    for pk in parsed_keys:
-        name       = pk[0]
-        subscript  = pk[1]
-        conditions = pk[2] # FIXME: not implemented yet.
-
-        rawobj = myjson[name]
-
-        if not subscript or subscript == '':
-            objs = rawobj
-        else:
-            if not isinstance(rawobj, list):
-                raise TypeError("Invalid JSON object path: %s is not an array"%name)
-
-            if subscript == '*':
-                objs = rawobj
-            else:
-                objs = [ rawobj[int(subscript)] ]
-
-        if not rest or rest == '':
-            filtered[name] = objs
-        else:
-            filtered[name] = dotdictget(objs, rest)
-
-    return filtered
 
 
 ##############################################################################
