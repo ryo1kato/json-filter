@@ -68,18 +68,8 @@ def is_rawtype(obj):
 
 
 def debug(msg):
-    print "DEBUG: ", msg
+    #print "DEBUG: ", msg
     pass
-
-res = {
-        "delim": "[\[\{\.]",
-        "name":  ".([A-Za-z]\w*|\*)",
-        "index": "(?:\[(?P<index>\d+|\*)\])"
-}
-re_delim = re.compile("^%(delim)s"%res)
-re_name  = re.compile("^%(name)s(?P<rest>%(delim)s.+)*$" % res)
-re_index = re.compile("^%(index)s(?P<rest>%(delim)s.+)*$" % res)
-#re_multi = re.compile(".\{[^\{\}]*[^\\]\}(?<rest>%(delim)s)" % res)
 
 class DotDictError(Exception):
     def __init__(self, msg=''):
@@ -96,6 +86,18 @@ class DotDictMalformed(DotDictError):
 class DotDictNoMatch(DotDictError):
     pass
 
+res = {
+        "delim": "[\[\.]",
+        "name":  "([A-Za-z]\w*|\*)",
+        "index": "(?:\[(?P<index>\d+|\*)\])"
+}
+names = { "names": "%(name)s(%(delim)s.+)?" % res }
+res['multi'] = "%(names)s(?:,%(names)s)*" % names
+
+re_delim = re.compile("^%(delim)s"%res)
+re_name  = re.compile("^\.%(name)s(?P<rest>%(delim)s.+)*$" % res)
+re_index = re.compile("^%(index)s(?P<rest>%(delim)s.+)*$" % res)
+re_multi = re.compile("^\.\{(?P<multi>%(multi)s)\}(?P<rest>%(delim)s.+)*$" % res)
 
 
 def dotdictget(myjson, dotdict):
@@ -178,12 +180,12 @@ def _dotdictget_multi(myjson, dotdict, traversed):
 def _dotdictget(myjson, dotdict, traversed=[]):
     debug("dotdict: '%s'"%dotdict)
     if not dotdict or dotdict == '':
-        debug("  Leaf: " + ''.join(traversed))
+        debug("    Leaf: " + ''.join(traversed))
         return myjson
     else:
         m_name  = re_name.match(dotdict)
         m_index = re_index.match(dotdict)
-        #m_multi = re_multi.match(dotdict)
+        m_multi = re_multi.match(dotdict)
         if m_name:
             name = m_name.group(1)
             rest = m_name.group('rest')
@@ -193,6 +195,17 @@ def _dotdictget(myjson, dotdict, traversed=[]):
             index_s = m_index.group(1)
             rest  = m_index.group('rest')
             return _dotdictget_list(myjson, index_s, rest, traversed)
+
+        elif m_multi:
+            multi_expanded = {}
+            multi = m_multi.group('multi').split(',')
+            rest = m_multi.group('rest') or ""
+            for path in multi:
+                newpath = "." + path + rest
+                debug("NEWPATH: " + newpath)
+                ret = _dotdictget(myjson, newpath, traversed)
+                multi_expanded.update( ret )
+            return multi_expanded
 
         else:
             raise DotDictMalformed(dotdict)
