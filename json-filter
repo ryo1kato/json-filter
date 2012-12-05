@@ -43,7 +43,7 @@ import re
 import optparse
 import json
 
-sys.tracebacklimit = 2
+#sys.tracebacklimit = 2
 
 class OutFormat:
     Auto, JSON, CSV = range(3)
@@ -63,53 +63,133 @@ def is_rawtype(obj):
 
 
 ##############################################################################
+# "name" is shorthand for "TOP.name" or "TOP[*].name"
+# "[99].name" is shorthand for "TOP[99].name"
+# "name1.name2" is shorthand for "name1[*].name2" or even "name1[*].name2"
+# when name1 and/or name2 is an array.
 
-res_name      = "([A-Za-z]\w*)"    # group 1
-res_subscript = "(\[(\d+|\*)\])?"  # group 2 and 3
-res_condition = "(\([=<>]\w+(\|[=<>]\w+)*\))?"
-_res_node      = {'re_node': res_name + res_subscript + res_condition}
 
-re_subscript  = re.compile("^%s$"%res_subscript)
-re_dotdict    = re.compile("^%(re_node)s$" % _res_node)
-re_dotdict_multi = re.compile("^\{(%(re_node)s(,%(re_node)s)*)\}$" % _res_node)
+
+def debug(msg):
+    print "DEBUG: ", msg
+    pass
+
+res = {
+        "delim": "[\[\{\.]",
+        "name":  ".([A-Za-z]\w*)",
+        "index": "(?:\[(?P<index>\d+|\*)\])"
+}
+re_delim = re.compile("^%(delim)s"%res)
+re_name  = re.compile("^%(name)s(?P<rest>%(delim)s.+)*$" % res)
+re_index = re.compile("^%(index)s(?P<rest>%(delim)s.+)*$" % res)
+#re_multi = re.compile(".\{[^\{\}]*[^\\]\}(?<rest>%(delim)s)" % res)
+
+class DotDictError(Exception):
+    def __init__(self, msg=''):
+        self.msg = msg
+    def __str__(self):
+        return self.msg
+
+class DotDictMalformed(DotDictError):
+    pass
+
+class DotDictNoMatch(DotDictError):
+    pass
+
 
 
 def dotdictget(myjson, dotdict):
-    node_str, _, rest = dotdict.partition('.')
-    m = re_subscript.match(node_str)
-    if isinstance(myjson, list) and m:
-        myjson2 = [ myjson[ int(m.group(2)) ] ]
-        return _dotdictget( myjson2, rest )
+    """Wrapper for _dotdictget() to allow omiting topmost object/array index
+    """
+    if re_delim.match(dotdict):
+        normalized_dotdict = dotdict
     else:
-        return _dotdictget( myjson, dotdict )
+        normalized_dotdict = '.' + dotdict
+
+    return _dotdictget(myjson, normalized_dotdict, [])
 
 
 
-def _dotdictget(myjson, dotdict):
-    node_str, _, rest = dotdict.partition('.')
-
-    single_node = re_dotdict.match(node_str)
-    multi_node  = re_dotdict_multi.match(node_str)
-
-    if single_node:
-        keys = [ node_str ]
-    elif multi_node:
-        keys = multi_node.group(1).split(',')
-    elif dotdict == '':
+def _dotdictget(myjson, dotdict, traversed=[]):
+    debug("dotdict: '%s'"%dotdict)
+    if not dotdict or dotdict == '':
+        debug("  Leaf: " + ''.join(traversed))
         return myjson
     else:
-        raise ValueError("Malformed JSON object path")
+        m_name  = re_name.match(dotdict)
+        m_index = re_index.match(dotdict)
+        #m_multi = re_multi.match(dotdict)
+        if m_name:
+            name = m_name.group(1)
+            rest = m_name.group('rest')
+            trace = traversed+["."+name]
+            try:
+                if isinstance(myjson, list):
+                    # equivalent to [*].name
+                    subtree = [ _dotdictget(j[name], rest, trace) for j in myjson ]
+                else:
+                    subtree = _dotdictget(myjson[name], rest, trace)
+                return {name: subtree}
+            except KeyError:
+                raise DotDictNoMatch(trace)
 
-    parsed_keys = []
-    for k in keys:
-        parsed = re_dotdict.match(k)
-        parsed_keys.append(( parsed.group(1), parsed.group(3), parsed.group(4) ))
+        elif m_index:
+            index_s = m_index.group(1)
+            rest  = m_index.group('rest')
+            trace = traversed+["[%s]"%index_s]
+            if not isinstance(myjson,list):
+                raise DotDictNoMatch(trace)
+            try:
+                if index_s == '*':
+                    return [ _dotdictget(j, rest, trace) for j in myjson ]
+                else:
+                    index = int(index_s)
+                    subtree = _dotdictget(myjson[index], rest, trace)
+                    return [subtree]
+            except IndexError:
+                raise DotDictNoMatch(trace)
 
-    if isinstance(myjson, list):
-        return [ _dotdictget2(j, parsed_keys, rest) for j in myjson ]
-    else:
-        return _dotdictget2(myjson, parsed_keys, rest)
+        else:
+            raise DotDictMalformed(dotdict)
 
+
+
+# def dotdictget(myjson, dotdict):
+#     node_str, _, rest = dotdict.partition('.')
+#     m = re_subscript.match(node_str)
+#     if isinstance(myjson, list) and m:
+#         myjson2 = [ myjson[ int(m.group(2)) ] ]
+#         return _dotdictget( myjson2, rest )
+#     else:
+#         return _dotdictget( myjson, dotdict )
+# 
+# def _dotdictget(myjson, dotdict):
+#     """multi-node expression and array expander
+#     """
+#     node_str, _, rest = dotdict.partition('.')
+# 
+#     single_node = re_dotdict.match(node_str)
+#     multi_node  = re_dotdict_multi.match(node_str)
+# 
+#     if single_node:
+#         keys = [ node_str ]
+#     elif multi_node:
+#         keys = multi_node.group(1).split(',')
+#     elif dotdict == '':
+#         return myjson
+#     else:
+#         raise ValueError("Malformed JSON object path")
+# 
+#     parsed_keys = []
+#     for k in keys:
+#         parsed = re_dotdict.match(k)
+#         parsed_keys.append(( parsed.group(1), parsed.group(2), parsed.group(3) ))
+# 
+#     if isinstance(myjson, list):
+#         return [ _dotdictget2(j, parsed_keys, rest) for j in myjson ]
+#     else:
+#         return _dotdictget2(myjson, parsed_keys, rest)
+# 
 
 # handle (multiple) path name and conditions
 def _dotdictget2(myjson, parsed_keys, rest):
@@ -216,7 +296,7 @@ def print_csv_list(myListList, filter_columns=None, escape=True):
 def print_csv(mylist, filter_columns=None, escape=True):
     if not isinstance(mylist, list):
         raise TypeError("Non-list data")
-    
+
     if isinstance(mylist[0], dict):
         print_csv_dict(mylist, filter_columns, escape)
     elif isinstance(mylist[0], list):
