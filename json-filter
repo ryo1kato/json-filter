@@ -165,9 +165,6 @@ def _dotdictget_list(mylist, index_s, rest, traversed=[]):
     else:
         raise DotDictNoMatch(trace)
 
-def _dotdictget_multi(myjson, dotdict, traversed):
-    pass
-
 
 def _dotdictget(myjson, dotdict, traversed=[]):
     debug("dotdict: %s/%s"%("".join(traversed), dotdict or "$"))
