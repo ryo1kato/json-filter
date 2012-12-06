@@ -9,17 +9,21 @@
 VERSION = (0,2)
 USAGE = """\
 %prog [OPTIONS] [FILENAME] [JSON_DITDICT]
-%prog --csv [OPTIONS] [FILENAME] [JSON_DITDICT] [--columns=COLNAME1[,COLNAME2[,...]]]
+%prog --csv [OPTIONS] [FILENAME] [JSON_DITDICT] [COLUMNS...]
+
 DESCRIPTION
   Simple JSON analyzer and filter with dotdict notation + wildcard support.
-JSON_DOTDICT
-  attr1.attr2[999].attr3
-  attr1.attr2[*].attr3
-  attr1.attr2.attr3(attr4=val4)
-  attr1.attr2.attr3.attr4(=val4)
-\
-"""
 
+JSON_DOTDICT
+  '.name1.name2[999].name3' - full path
+  '[0].name1.name2'         - if a top level object is an array.
+  'name1.name2[999].name3'  - You can ommit proceeding '.'
+  'name1.name2[*].name3'    - Array index wildcard (all items of array)
+  'name1.name2[1,2,3-9]'    (index range is NOT IMPLEMENTED YET)
+  'name1.name2.name3'       - Or you can even ommit whole '[*]'
+  'name1.*.name3'           - Wildcard '*'
+  'name1.*2.name3'          (partial match is NOT IMPLEMENTED YET.)
+  '{name1a,name1b}.name2'   - Expanded to 'name1a.name2' and 'name1a.name2'"""
 #
 # TODO
 #   * Better error and exception handling / ignore DotDictNoMatch(?)
@@ -147,7 +151,7 @@ def _dotdictget_dict(mydict, name, rest, traversed=[]):
                 trace = traversed + ["[*]", "."+name]
                 # assume shorthand notation; name1.name2 is
                 # equivalent to name1[*].name2 if name1 is a list.
-                if any([is_rawtype(j) for j in mydict]):
+                if any([not isinstance(j,dict) for j in mydict]):
                     raise DotDictNoMatch(trace)
                 return [ {name: _dotdictget(j[name], rest, trace)} for j in mydict ]
             elif isinstance(mydict, dict):
@@ -310,22 +314,15 @@ def myoptparse(argv):
     parser = optparse.OptionParser(
         usage=USAGE,
         version=("%%prog %d.%d" % VERSION) )
-
     parser.add_option("-a", "--auto",
         action="store_const", dest="outformat", const=OutFormat.Auto,
-        help="Output in JSON format for complex data structure, " +
-             "text output for data only with primitive data type (default)")
-
+        help="Text output for simple data structure, JSON otherwise")
     parser.add_option("-c", "--csv",
         action="store_const", dest="outformat", const=OutFormat.CSV,
-        help="Output in Comma Separated Value format.")
-
+        help="Try to output in CSV format (table like data structure only).")
     parser.add_option("-j", "--json",
         action="store_const", dest="outformat", const=OutFormat.JSON,
-        help="Output in JSON format even for simple array only with primitive data type, " +
-             "like array of numbers or strings")
-
-
+        help="Always output in JSON format")
 
     #parser.add_option("-H", "--no-csv-header",
     #    action="store_true",
