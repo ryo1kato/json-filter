@@ -19,8 +19,8 @@ JSON_DOTDICT
   '[0].name1.name2'         - if a top level object is an array.
   'name1.name2[999].name3'  - You can ommit proceeding '.'
   'name1.name2[*].name3'    - Array index wildcard (all items of array)
+  'name1.name2.name3'       - Implecit list expansion - assume '[*]' is omitted.
   'name1.name2[1,2,3-9]'    (index range is NOT IMPLEMENTED YET)
-  'name1.name2.name3'       - Or you can even ommit whole '[*]'
   'name1.*.name3'           - Wildcard '*'
   'name1.*2.name3'          (partial match is NOT IMPLEMENTED YET.)
   '{name1a,name1b}.name2'   - Expanded to 'name1a.name2' and 'name1a.name2'"""
@@ -145,7 +145,16 @@ def _dotdictget_list(mylist, index_s, rest, traversed=[]):
     trace = traversed+["[%s]"%index_s]
     if isinstance(mylist,list):
         if index_s == '*':
-            return [ _dotdictget(j, rest, trace) for j in mylist ]
+            list_expanded = []
+            for j in mylist:
+                try:
+                    list_expanded.append( _dotdictget(j, rest, trace) )
+                except DotDictNoMatch:
+                    pass
+            if list_expanded:
+                return list_expanded
+            else:
+                raise DotDictNoMatch(trace)
         else:
             index = int(index_s)
             try:
@@ -170,13 +179,11 @@ def _dotdictget(myjson, dotdict, traversed=[]):
         m_index = re_index.match(dotdict)
         m_multi = re_multi.match(dotdict)
         if m_name:
-            name = m_name.group(1)
-            rest = m_name.group('rest')
             if isinstance(myjson,list):
-                traversed + ['[*]'] # implicit list expansion
-                return [ _dotdictget_dict(j , name, rest, traversed
-                            ) for j in myjson]
+                return _dotdictget_list(myjson, '*', dotdict, traversed)
             else:
+                name = m_name.group(1)
+                rest = m_name.group('rest')
                 return _dotdictget_dict(myjson, name, rest, traversed)
 
         elif m_index:
@@ -185,12 +192,11 @@ def _dotdictget(myjson, dotdict, traversed=[]):
             return _dotdictget_list(myjson, index_s, rest, traversed)
 
         elif m_multi:
-            multi = m_multi.group('multi').split(',')
-            rest = m_multi.group('rest') or ""
             if isinstance(myjson,list):
-                traversed + ['[*]'] # implicit list expansion
-                return [ _dotdictget(j, dotdict, traversed) for j in myjson ]
+                return _dotdictget_list(myjson, '*', dotdict, traversed)
             else:
+                multi = m_multi.group('multi').split(',')
+                rest  = m_multi.group('rest') or ""
                 multi_expanded = {}
                 for path in multi:
                     newpath = "." + path + rest
