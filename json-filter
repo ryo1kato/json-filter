@@ -211,6 +211,22 @@ def _dotdictget(myjson, dotdict, traversed=[]):
 
 ##############################################################################
 
+def print_csv(mylist, filter_columns=None, escape=True):
+    if isinstance(mylist, list):
+        if len(mylist) == 1:
+            print_csv(mylist[0], filter_columns, escape)
+        else:
+            print "Not implemented yet"
+            pass
+    elif isinstance(mylist,dict) and len(mylist) == 1:
+        print_csv(mylist.values()[0], filter_columns, escape)
+    else:
+        raise DotDictMalformed("Cannot convert non-list data to CSV")
+
+
+
+##############################################################################
+
 def print_json_pretty(obj, force=False):
     """If obj is simply an array or raw data type, or a dict with
     only key-value pair in it, print as text.
@@ -245,58 +261,6 @@ def print_json_pretty(obj, force=False):
         print json.dumps(obj, indent=4)
 
 
-def print_csv_dict(myDictList, filter_columns=None, escape=True):
-    """print array of dict as csv
-    """
-    def getcol(row, col):
-            if colname in row:
-                return str(row[colname])
-            else:
-                return '__' + colname + '__'
-
-    if filter_columns:
-        colnames = filter_columns
-    else:
-        colnames = myDictList[0].keys()
-
-    for row in myDictList:
-        # FIXME: check here data type(?) is dict for all rows
-        cols = [ getcol(row, colname) for colname in colnames ]
-
-        # FIXME: should escape the comma
-        #for cell in cols:
-        #    if ',' in cell:
-        #        raise ValueError("',' in the data")
-
-        print ','.join( cols )
-
-
-def print_csv_list(myListList, filter_columns=None, escape=True):
-    nr_cols = len(myListList[0])
-
-    if filter_columns:
-        for row in myListList:
-            print ','.joins(   [ row[int(col)] for col in filter_columns ]  )
-    else:
-        for row in myListList:
-            print ','.join( row )
-
-
-def print_csv(mylist, filter_columns=None, escape=True):
-    if not isinstance(mylist, list):
-        raise TypeError("Non-list data")
-
-    if isinstance(mylist[0], dict):
-        print_csv_dict(mylist, filter_columns, escape)
-    elif isinstance(mylist[0], list):
-        print_csv_list(mylist, filter_columns, escape)
-    elif is_rawtype(mylist[0]):
-        for item in mylist:
-            print item
-    else:
-        raise TypeError("Unrecognizable data")
-
-
 
 ##############################################################################
 
@@ -320,7 +284,7 @@ def myoptparse(argv):
     #    help="Print header for Comma Separated Value output.")
 
     (opt, args) = parser.parse_args(argv)
-    return (opt, args) 
+    return (opt, args)
 
 
 def json_filter(args):
@@ -365,10 +329,7 @@ def main():
         (myjson, dotdict) = json_filter(args)
 
         if opt.outformat == OutFormat.CSV:
-            #print json.dumps(myjson, indent=4)
-            #for row in json2table( myjson, dotdict ):
-            #    print ",".join(row)
-            pass
+            print_csv(myjson)
         elif opt.outformat == OutFormat.JSON:
             print json.dumps(myjson, indent=4)
         else:
