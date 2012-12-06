@@ -75,10 +75,13 @@ def debug(msg):
     #print "DEBUG: ", msg
     pass
 
+def concat(mylist):
+    return "".join(mylist)
+
 class DotDictError(Exception):
     def __init__(self, msg=''):
         if isinstance(msg, list):
-            self.msg = "".join(msg)
+            self.msg = concat(msg)
         else:
             self.msg = msg
     def __str__(self):
@@ -117,47 +120,23 @@ def dotdictget(myjson, dotdict):
 
 def _dotdictget_dict(mydict, name, rest, traversed=[]):
     trace = traversed + ["."+name]
+    if not isinstance(mydict,dict):
+        raise DotDictNoMatch(trace)
+
     try:
         if name == '*':
-            if isinstance(mydict, list):
-                trace = traversed + ["[*]"]
-                wildcard_expanded = []
-                for myjson in mydict:
-                    try:
-                        subtree = _dotdictget_dict(myjson, name, rest, trace)
-                        wildcard_expanded.append( subtree )
-                    except DotDictNoMatch:
-                        pass
-                if wildcard_expanded:
-                    return wildcard_expanded
-                else:
-                    raise DotDictNoMatch(trace)
-            elif isinstance(mydict, dict):
-                wildcard_expanded = {}
-                for n in mydict.keys():
-                    try:
-                        wildcard_expanded[n] = _dotdictget(mydict[n], rest, trace)
-                    except DotDictNoMatch:
-                        pass
-                if wildcard_expanded:
-                    return wildcard_expanded
-                else:
-                    raise DotDictNoMatch(trace)
+            wildcard_expanded = {}
+            for n in mydict.keys():
+                try:
+                    wildcard_expanded[n] = _dotdictget(mydict[n], rest, trace)
+                except DotDictNoMatch:
+                    pass
+            if wildcard_expanded:
+                return wildcard_expanded
             else:
-                raise DotDictNoMatch(trace)
-
+                raise DotDictNoMatch(concat(trace) + rest)
         else:
-            if isinstance(mydict, list):
-                trace = traversed + ["[*]", "."+name]
-                # assume shorthand notation; name1.name2 is
-                # equivalent to name1[*].name2 if name1 is a list.
-                if any([not isinstance(j,dict) for j in mydict]):
-                    raise DotDictNoMatch(trace)
-                return [ {name: _dotdictget(j[name], rest, trace)} for j in mydict ]
-            elif isinstance(mydict, dict):
-                return {name: _dotdictget(mydict[name], rest, trace)}
-            else:
-                raise DotDictNoMatch(trace)
+            return {name: _dotdictget(mydict[name], rest, trace)}
     except KeyError:
         raise DotDictNoMatch(trace)
 
@@ -182,7 +161,7 @@ def _dotdictget_multi(myjson, dotdict, traversed):
 
 
 def _dotdictget(myjson, dotdict, traversed=[]):
-    debug("dotdict: '%s'"%dotdict)
+    debug("dotdict: %s/%s"%("".join(traversed), dotdict or "$"))
     if not dotdict or dotdict == '':
         debug("    Leaf: " + ''.join(traversed))
         return myjson
@@ -193,7 +172,12 @@ def _dotdictget(myjson, dotdict, traversed=[]):
         if m_name:
             name = m_name.group(1)
             rest = m_name.group('rest')
-            return _dotdictget_dict(myjson, name, rest, traversed)
+            if isinstance(myjson,list):
+                traversed + ['[*]'] # implicit list expansion
+                return [ _dotdictget_dict(j , name, rest, traversed
+                            ) for j in myjson]
+            else:
+                return _dotdictget_dict(myjson, name, rest, traversed)
 
         elif m_index:
             index_s = m_index.group(1)
@@ -201,15 +185,19 @@ def _dotdictget(myjson, dotdict, traversed=[]):
             return _dotdictget_list(myjson, index_s, rest, traversed)
 
         elif m_multi:
-            multi_expanded = {}
             multi = m_multi.group('multi').split(',')
             rest = m_multi.group('rest') or ""
-            for path in multi:
-                newpath = "." + path + rest
-                debug("NEWPATH: " + newpath)
-                ret = _dotdictget(myjson, newpath, traversed)
-                multi_expanded.update( ret )
-            return multi_expanded
+            if isinstance(myjson,list):
+                traversed + ['[*]'] # implicit list expansion
+                return [ _dotdictget(j, dotdict, traversed) for j in myjson ]
+            else:
+                multi_expanded = {}
+                for path in multi:
+                    newpath = "." + path + rest
+                    debug("NEWPATH: " + newpath)
+                    ret = _dotdictget(myjson, newpath, traversed)
+                    multi_expanded.update( ret )
+                return multi_expanded
 
         else:
             raise DotDictMalformed(dotdict)
