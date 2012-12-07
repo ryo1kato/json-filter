@@ -9,27 +9,32 @@
 VERSION = (0,2)
 USAGE = """\
 %prog [OPTIONS] [FILENAME] [JSON_DITDICT]
-%prog --csv [OPTIONS] [FILENAME] [JSON_DITDICT] [COLUMNS...]
+%prog --csv [OPTIONS] [FILENAME] [JSON_DITDICT] [--cols=COL1,COL2,...]
 
 DESCRIPTION
   Simple JSON analyzer and filter with dotdict notation + wildcard support.
 
-JSON_DOTDICT
+COLUMNS
+  Name or position of column for output CSV. Symbolic name if input is
+  an array of dictionaries, or position number (starts from 1), if input
+  is an array of arrays.
+
+EXAMPLE
   '.name1.name2[999].name3' - full path
   '[0].name1.name2'         - if a top level object is an array.
   'name1.name2[999].name3'  - You can ommit proceeding '.'
   'name1.name2[*].name3'    - Array index wildcard (all items of array)
   'name1.name2.name3'       - Implecit list expansion - assume '[*]' is omitted.
-  'name1.name2[1,2,3-9]'    (index range is NOT IMPLEMENTED YET)
+ ('name1.name2[1,2,3-9]'    - index range is NOT IMPLEMENTED YET)
   'name1.*.name3'           - Wildcard '*'
-  'name1.*2.name3'          (partial match is NOT IMPLEMENTED YET.)
+ ('name1.na*2.name3'        - partial match is NOT IMPLEMENTED YET.)
   '{name1a,name1b}.name2'   - Expanded to 'name1a.name2' and 'name1a.name2'"""
 #
 # TODO
-#   * Better error and exception handling / ignore DotDictNoMatch(?)
-#   * CSV output
 #   * Unit test
 #   * Multiple subscript / range support for list (subscript_str)
+#   * Partial match wildcard support
+#   * Attribute conditions
 #
 # BUGS & KNOWN ISSUES
 #   * Not good for big data; this script loads entire input into memory as
@@ -87,11 +92,10 @@ class DotDictError(Exception):
     def __str__(self):
         return self.msg.__str__()
 
-class DotDictMalformed(DotDictError):
-    pass
-
-class DotDictNoMatch(DotDictError):
-    pass
+class DotDictMalformed(DotDictError):  pass
+class DotDictNoMatch(DotDictError): pass
+class CSVConvertError(DotDictError): pass
+class CSVInvalidColumn(DotDictError): pass
 
 res = {
         "delim": "[\[\.]",
@@ -206,22 +210,123 @@ def _dotdictget(myjson, dotdict, traversed=[]):
             raise DotDictMalformed(dotdict)
 
 
-
-
-
 ##############################################################################
 
-def print_csv(mylist, filter_columns=None, escape=True):
+def _escape_csv_cell(item, onError=None):
+    """if an item is composite object, throw error,
+    return a dummy value or empty string.
+    """
+    if is_rawtype(item):
+        return item
+    elif onError:
+        if isinstance(onError, basestring):
+            return onError
+        elif hasattr(onError,'__call__'):
+            return onError(item)
+        else:
+            return ''
+    else:
+        raise CSVConvertError()
+
+
+def _get_cells(row, indices_or_keys, escape):
+    """convert row, as list or dict, into list of 'cells' for CSV.
+    if escape is not None, apply _escape_csv_cell()"""
+    cells = []
+    if indices_or_keys:
+        for ik in indices_or_keys:
+            try:
+                if escape:
+                    cells.append( _escape_csv_cell(row[ik], escape) )
+                else:
+                    cells.append( row[ik] )
+            except (IndexError, KeyError):
+                if escape:
+                    cells.append('')
+                else:
+                    msg = "invalid key or index for col[%s]"%ik
+                    raise CSVConvertError(msg)
+
+    elif isinstance(row,list):
+        if escape:
+            cells = [ _escape_csv_cell(cel, escape) for cel in row ]
+        else:
+            cells = row
+    else:
+        # _get_cells() must always be called with keys (indices_or_keys)
+        # if row is an instance of dict
+        raise CSVConvertError("Internal Error in _get_cells()")
+
+    return [str(cel) for cel in cells]
+
+
+def _print_csv_list(myListList, outfile, colIndices, escape):
+    """print a row of a CSV file which is an instance of list.
+    """
+    nrRow = 0
+    for row in myListList:
+        cells = []
+        nrRow += 1
+        if isinstance(row, list):
+            cells = _get_cells(row, colIndices, escape)
+            outfile.write(",".join(cells) + '\n')
+        else:
+            msg = "Row %d: Cannot convert composit object to CSV: %s" \
+                % (nrRow, row)
+            raise CSVConvertError("msg")
+
+
+
+def _print_csv_dict(myDictList, outfile,
+                    colNames=None, header=True, escape=True):
+    nrRow = 0
+    if not colNames:
+        colNames = myDictList[0].keys()
+    if header:
+        outfile.write(",".join(colNames) + '\n')
+
+    for row in myDictList:
+        nrRow += 1
+        if isinstance(row, dict):
+            cells = _get_cells(row, colNames, escape)
+            outfile.write(",".join(cells) + '\n')
+        else:
+            msg = "Row %d: Cannot convert composit object to CSV: %s" \
+                % (nrRow, row)
+            raise CSVConvertError("Cannot convert composit object to CSV")
+
+
+def _print_csv(mylist, outfile, columns, header=True, escape=True):
+    if isinstance(mylist[0], list):
+        colIndices = []
+        for i in columns or []:
+            try:
+                colIndices.append(int(i)-1)
+            except ValueError:
+                raise CSVInvalidColumn("Invalid column number for array: %s"%i)
+        _print_csv_list(mylist, outfile, colIndices, escape)
+    elif isinstance(mylist[0], dict):
+        colNames = columns or mylist[0].keys()
+        _print_csv_dict(mylist, outfile, colNames, header, escape)
+    else:
+        msg = "the 1st row is not a list nor a dict: %s"%mylist[0]
+        raise DotDictNoMatch(msg)
+
+
+def print_csv(mylist, outfile, columns=None, header=True, escape=True):
+    """Wrapper for _print_csv(): if mylist contains
+    only one element, recurse into it.
+    """
     if isinstance(mylist, list):
         if len(mylist) == 1:
-            print_csv(mylist[0], filter_columns, escape)
+            print_csv(mylist[0], outfile, columns, header, escape)
         else:
-            print "Not implemented yet"
-            pass
+            _print_csv(mylist, outfile, columns, header, escape)
     elif isinstance(mylist,dict) and len(mylist) == 1:
-        print_csv(mylist.values()[0], filter_columns, escape)
+        print_csv(mylist.values()[0], outfile, columns, header, escape)
     else:
         raise DotDictMalformed("Cannot convert non-list data to CSV")
+
 
 
 
@@ -263,6 +368,9 @@ def print_json_pretty(obj, force=False):
 
 
 ##############################################################################
+def DIE(msg):
+    sys.stderr.write("ERROR: %s\n"%msg)
+    sys.exit(1)
 
 def myoptparse(argv):
     ## Option Parser
@@ -278,10 +386,12 @@ def myoptparse(argv):
     parser.add_option("-j", "--json",
         action="store_const", dest="outformat", const=OutFormat.JSON,
         help="Always output in JSON format")
-
-    #parser.add_option("-H", "--no-csv-header",
-    #    action="store_true",
-    #    help="Print header for Comma Separated Value output.")
+    parser.add_option("--cols", dest="columns",
+        help="(with --csv) output only selected columns" +\
+             "sparated by commna(',')", metavar="COL1,COL2")
+    parser.add_option("-H", "--no-csv-header", dest='header',
+        action="store_false", default=True,
+        help="Print header for Comma Separated Value output.")
 
     (opt, args) = parser.parse_args(argv)
     return (opt, args)
@@ -301,24 +411,26 @@ def json_filter(args):
         infile  = open(args[0])
         dotdict = args[1]
     else:
-        sys.stderr.write("Too many (%d) arguments\n"%len(args))
-        sys.exit(1)
+        DIE("Too many (%d) arguments\n"%len(args))
+
+    try:
+        inputjson = json.load(infile)
+    except ValueError as e:
+        DIE(str(e))
 
     if dotdict:
         try:
-            myjson = dotdictget( json.load(infile), dotdict )
+            myjson = dotdictget( inputjson, dotdict )
         except DotDictNoMatch as e:
             sys.stderr.write("No matching object found for '%s'\n"%e)
             sys.exit(1)
         except DotDictMalformed as e:
-            sys.stderr.write("Malformed DotDict notation: '%s' in '%s'\n" %(e, dotdict))
-            sys.exit(1)
+            DIE("Malformed DotDict notation: '%s' in '%s'\n" %(e, dotdict))
     else:
-        myjson = json.load( infile )
-
+        myjson = inputjson
 
     if dotdict and len(myjson) == 0:
-         raise ValueError("No matching JSON attribute found in the input")
+         DIE("No matching JSON attribute found in the input")
 
     return (myjson, dotdict)
 
@@ -329,7 +441,8 @@ def main():
         (myjson, dotdict) = json_filter(args)
 
         if opt.outformat == OutFormat.CSV:
-            print_csv(myjson)
+            columns = opt.columns and opt.columns.split(',')
+            print_csv(myjson, sys.stdout, columns, header=opt.header)
         elif opt.outformat == OutFormat.JSON:
             print json.dumps(myjson, indent=4)
         else:
@@ -337,6 +450,9 @@ def main():
 
     except KeyboardInterrupt:
         sys.exit(1)
+
+    #except Exception as e:
+    #    DIE("Unhandled Internal Error: %s"%str(e))
 
 
 if __name__ == "__main__":
