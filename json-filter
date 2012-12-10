@@ -53,7 +53,7 @@ import json
 #sys.tracebacklimit = 2
 
 class OutFormat:
-    Auto, JSON, CSV = range(3)
+    Auto, Pretty, JSON, CSV = range(4)
 
 ##############################################################################
 
@@ -344,33 +344,47 @@ def print_json_pretty(obj, force=False):
     only key-value pair in it, print as text.
     Otherwise dump it as JSON.
     """
+    def recurse(subobj, force):
+        # if the obj is array with one element / dict with one key, try to
+        # pretty-print the inner obj.
+        # FIXME: is it for 'single1.single2_3.single3_3'
+        if print_json_pretty(subobj, force=True):
+            return True
+        else:
+            if force:
+                return False
+            else:
+                print json.dumps(obj, indent=4)
+                return True
+
     if is_rawtype(obj):
         print obj
+        return True
     elif isinstance(obj, list):
         if all([ is_rawtype(i) for i in obj ]):
             for item in obj:
                 print item
+            return True
+        elif len(obj) == 1:
+            return recurse( obj[0], force )
         elif all([ isinstance(i, dict) and len(i.keys()) == 1 and is_rawtype(i.values()[0])
                  for i in obj ]):
             for one_item_dict in obj:
                 print one_item_dict.values()[0]
-        elif not force:
-            print json.dumps(obj, indent=4)
-        else:
+            return True
+        elif force:
             # failed to pretty-print the object and need to back-track
+            return False
+        else:
+            print json.dumps(obj, indent=4)
             return True
     elif isinstance(obj, dict) and len(obj.keys()) == 1:
-        # if the obj is dict with one key, try to pretty the inner obj.
-        # FIXME for 'single1.single2_3.single3_3'
-        if print_json_pretty( obj.values()[0], force=True ):
-            if force:
-                return True
-            else:
-                print json.dumps(obj, indent=4)
+        return recurse( obj.values()[0], force )
     elif force:
-        return True
+        return False
     else:
         print json.dumps(obj, indent=4)
+        return True
 
 
 
@@ -387,6 +401,10 @@ def myoptparse(argv):
     parser.add_option("-a", "--auto",
         action="store_const", dest="outformat", const=OutFormat.Auto,
         help="Text output for simple data structure, JSON otherwise")
+    parser.add_option("-p", "--pretty",
+        action="store_const", dest="outformat", const=OutFormat.Pretty,
+        help="Simple text output for list-like data structure" +
+             "(exit with error if input has complex data structure")
     parser.add_option("-c", "--csv",
         action="store_const", dest="outformat", const=OutFormat.CSV,
         help="Try to output in CSV format (table like data structure only).")
@@ -456,12 +474,20 @@ def main():
             try:
                 print_csv(myjson, sys.stdout, columns,
                           header=opt.header, escape=opt.escape)
+                sys.exit(0)
             except (CSVConvertError, CSVInvalidColumn) as e:
                 DIE(e)
         elif opt.outformat == OutFormat.JSON:
             print json.dumps(myjson, indent=4)
+            sys.exit(0)
+        elif opt.outformat == OutFormat.Pretty:
+            if print_json_pretty(myjson, force=True):
+                pass
+            else:
+                DIE("Too complex data for '--pretty' output")
         else:
             print_json_pretty(myjson)
+            sys.exit(0)
 
     except KeyboardInterrupt:
         sys.exit(1)
