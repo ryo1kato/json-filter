@@ -2,7 +2,7 @@
 #
 # Dumb simple JSON accessor with dotdict notation support.
 #
-# Dotdict notation of "data.capacityList[0].capacity.hostName"
+# Dotdict notation of "capacityList[0].capacity.hostName"
 # is equivalent to "['capacityList'][0]['capacity']['hostName']" of Python
 #
 
