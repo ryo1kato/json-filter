@@ -155,11 +155,11 @@ def _dotdictget(myjson, dotdict, traversed=[]):
                 leaves = []
                 for path in multi:
                     newpath = "." + path + rest
-                    debug("NEWPATH: " + newpath)
+                    debug("NEWPATH: %s/%s"%("".join(traversed),newpath))
                     (ret, leaf) = _dotdictget(myjson, newpath, traversed)
                     multi_expanded.update( ret )
                     leaves.extend( leaf )
-                return multi_expanded
+                return (multi_expanded, leaves)
 
         else:
             raise DotDictMalformed(dotdict)
