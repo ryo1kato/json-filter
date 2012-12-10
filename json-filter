@@ -50,7 +50,7 @@ import re
 import optparse
 import json
 
-#sys.tracebacklimit = 2
+sys.tracebacklimit = 2
 
 class OutFormat:
     Auto, Pretty, JSON, CSV = range(4)
@@ -122,59 +122,11 @@ def dotdictget(myjson, dotdict):
     return _dotdictget(myjson, normalized_dotdict, [])
 
 
-def _dotdictget_dict(mydict, name, rest, traversed=[]):
-    trace = traversed + ["."+name]
-    if not isinstance(mydict,dict):
-        raise DotDictNoMatch(trace)
-
-    try:
-        if name == '*':
-            wildcard_expanded = {}
-            for n in mydict.keys():
-                try:
-                    wildcard_expanded[n] = _dotdictget(mydict[n], rest, trace)
-                except DotDictNoMatch:
-                    pass
-            if wildcard_expanded:
-                return wildcard_expanded
-            else:
-                raise DotDictNoMatch(concat(trace) + rest)
-        else:
-            return {name: _dotdictget(mydict[name], rest, trace)}
-    except KeyError:
-        raise DotDictNoMatch(trace)
-
-
-def _dotdictget_list(mylist, index_s, rest, traversed=[]):
-    trace = traversed+["[%s]"%index_s]
-    if isinstance(mylist,list):
-        if index_s == '*':
-            list_expanded = []
-            for j in mylist:
-                try:
-                    list_expanded.append( _dotdictget(j, rest, trace) )
-                except DotDictNoMatch:
-                    pass
-            if list_expanded:
-                return list_expanded
-            else:
-                raise DotDictNoMatch(trace)
-        else:
-            index = int(index_s)
-            try:
-                subtree = _dotdictget(mylist[index], rest, trace)
-                return [subtree]
-            except IndexError:
-                raise DotDictNoMatch(trace)
-    else:
-        raise DotDictNoMatch(trace)
-
-
 def _dotdictget(myjson, dotdict, traversed=[]):
     debug("dotdict: %s/%s"%("".join(traversed), dotdict or "$"))
     if not dotdict or dotdict == '':
         debug("    Leaf: " + ''.join(traversed))
-        return myjson
+        return (myjson, [myjson])
     else:
         m_name  = re_name.match(dotdict)
         m_index = re_index.match(dotdict)
@@ -196,18 +148,77 @@ def _dotdictget(myjson, dotdict, traversed=[]):
             if isinstance(myjson,list):
                 return _dotdictget_list(myjson, '*', dotdict, traversed)
             else:
+                # aggregator
                 multi = m_multi.group('multi').split(',')
                 rest  = m_multi.group('rest') or ""
                 multi_expanded = {}
+                leaves = []
                 for path in multi:
                     newpath = "." + path + rest
                     debug("NEWPATH: " + newpath)
-                    ret = _dotdictget(myjson, newpath, traversed)
+                    (ret, leaf) = _dotdictget(myjson, newpath, traversed)
                     multi_expanded.update( ret )
+                    leaves.extend( leaf )
                 return multi_expanded
 
         else:
             raise DotDictMalformed(dotdict)
+
+
+def _dotdictget_dict(mydict, name, rest, traversed=[]):
+    trace = traversed + ["."+name]
+    if not isinstance(mydict,dict):
+        raise DotDictNoMatch(trace)
+
+    try:
+        if name == '*':
+            # aggregator
+            wildcard_expanded = {}
+            leaves = []
+            for n in mydict.keys():
+                try:
+                    subtree, leaf = _dotdictget(mydict[n], rest, trace)
+                    wildcard_expanded[n] = subtree
+                    leaves.extend( leaf )
+                except DotDictNoMatch:
+                    pass
+            if wildcard_expanded:
+                return (wildcard_expanded, leaves)
+            else:
+                raise DotDictNoMatch(concat(trace) + rest)
+        else:
+            subtree, leaf = _dotdictget(mydict[name], rest, trace)
+            return ({name: subtree}, leaf)
+    except KeyError:
+        raise DotDictNoMatch(trace)
+
+
+def _dotdictget_list(mylist, index_s, rest, traversed=[]):
+    trace = traversed+["[%s]"%index_s]
+    if isinstance(mylist,list):
+        if index_s == '*':
+            list_expanded = []
+            leaves = []
+            for j in mylist:
+                try:
+                    (subtree, leaf) = _dotdictget(j, rest, trace)
+                    list_expanded.append( subtree )
+                    leaves.extend( leaf )
+                except DotDictNoMatch:
+                    pass
+            if list_expanded:
+                return (list_expanded, leaves)
+            else:
+                raise DotDictNoMatch(trace)
+        else:
+            index = int(index_s)
+            try:
+                subtree, leaf = _dotdictget(mylist[index], rest, trace)
+                return ([subtree], leaf)
+            except IndexError:
+                raise DotDictNoMatch(trace)
+    else:
+        raise DotDictNoMatch(trace)
 
 
 ##############################################################################
@@ -421,6 +432,12 @@ def myoptparse(argv):
         action="store_true", default=False,
         help="(with --csv) Ignore error to convert CSV" +\
              "and do not attempt to normalize data(like escape ',' in data)")
+    parser.add_option("-l","--leaves", dest="leaf",
+        action="store_true", default=False,
+        help="output leaf nodes filtered by dotdit, instead of root")
+    parser.add_option("-v","--verbose",
+        action="store_true", default=False,
+        help="Verbose output")
 
     (opt, args) = parser.parse_args(argv)
     return (opt, args)
@@ -449,7 +466,7 @@ def json_filter(args):
 
     if dotdict:
         try:
-            myjson = dotdictget( inputjson, dotdict )
+            (myjson, leaves) = dotdictget( inputjson, dotdict )
         except DotDictNoMatch as e:
             sys.stderr.write("No matching object found for '%s'\n"%e)
             sys.exit(1)
@@ -457,43 +474,55 @@ def json_filter(args):
             DIE("Malformed DotDict notation: '%s' in '%s'\n" %(e, dotdict))
     else:
         myjson = inputjson
+        leaves = [ myjson ]
 
     if dotdict and len(myjson) == 0:
          DIE("No matching JSON attribute found in the input")
 
-    return (myjson, dotdict)
+    return (myjson, leaves, dotdict)
 
 
 def main():
     try:
         (opt, args) = myoptparse(sys.argv[1:])
-        (myjson, dotdict) = json_filter(args)
+        (myjson, leaves, dotdict) = json_filter(args)
+
+        if opt.leaf:
+            if len(leaves) == 1:
+                outjson = leaves[0]
+            else:
+                outjson = leaves
+        else:
+            outjson = myjson
 
         if opt.outformat == OutFormat.CSV:
             columns = opt.columns and opt.columns.split(',')
             try:
-                print_csv(myjson, sys.stdout, columns,
+                print_csv(outjson, sys.stdout, columns,
                           header=opt.header, escape=opt.escape)
                 sys.exit(0)
             except (CSVConvertError, CSVInvalidColumn) as e:
                 DIE(e)
         elif opt.outformat == OutFormat.JSON:
-            print json.dumps(myjson, indent=4)
+            print json.dumps(outjson, indent=4)
             sys.exit(0)
         elif opt.outformat == OutFormat.Pretty:
-            if print_json_pretty(myjson, force=True):
+            if print_json_pretty(outjson, force=True):
                 pass
             else:
                 DIE("Too complex data for '--pretty' output")
         else:
-            print_json_pretty(myjson)
+            print_json_pretty(outjson)
             sys.exit(0)
 
     except KeyboardInterrupt:
         sys.exit(1)
 
     except Exception as e:
-        DIE("Unhandled Internal Error: %s"%str(e))
+        if opt.verbose:
+            raise
+        else:
+            DIE("Unhandled Internal Error: %s"%str(e))
 
 
 if __name__ == "__main__":
