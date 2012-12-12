@@ -58,6 +58,18 @@ class OutFormat:
 ##############################################################################
 
 def is_number(obj):
+    """
+    >>> is_number(123)
+    True
+    >>> is_number(123.123)
+    True
+    >>> is_number(99999999999999999999999999999999999999)
+    True
+    >>> is_number('123.123')
+    False
+    >>> is_number([123, 123])
+    False
+    """
     if isinstance(obj, int) or isinstance(obj, long) or isinstance(obj, float):
         return True
     else:
@@ -113,6 +125,29 @@ re_multi = re.compile("^\.\{(?P<multi>%(multi)s)\}(?P<rest>%(delim)s.+)*$" % res
 
 def dotdictget(myjson, dotdict):
     """Wrapper for _dotdictget() to allow omiting topmost object/array index
+    >>> myjson = {'hoge': 'hogedata',
+    ...           'piyo1':{'foo':['bar','baz','quux']},
+    ...           'piyo2':{'foo':[1,2,3]},
+    ...           'huga':{'num123':[11,22,33]} }
+    >>> (j, l) = dotdictget(myjson,'hoge')
+    >>> j
+    {'hoge': 'hogedata'}
+    >>> (j, l) = dotdictget(myjson,'piyo1.foo[0]')
+    >>> j
+    {'piyo1': {'foo': ['bar']}}
+    >>> l
+    ['bar']
+    >>> (j, l) = dotdictget(myjson,'huga.num123[*]')
+    >>> j
+    {'huga': {'num123': [11, 22, 33]}}
+    >>> l
+    [11, 22, 33]
+    >>> (j, l) = dotdictget(myjson,'*.foo')
+    >>> j == {'piyo1':{'foo':['bar','baz','quux']},
+    ...       'piyo2':{'foo':[1,2,3]}}
+    True
+    >>> l == [['bar','baz','quux'], [1,2,3]]
+    True
     """
     if re_delim.match(dotdict):
         normalized_dotdict = dotdict
@@ -231,6 +266,12 @@ def _dotdictget_list(mylist, index_s, rest, traversed=[]):
 def _escape_csv_cell(item, onError=None):
     """if an item is composite object, throw error,
     return a dummy value or empty string.
+    >>> _escape_csv_cell(123)
+    123
+    >>> _escape_csv_cell([123],onError=lambda x: x[0])
+    123
+    >>> _escape_csv_cell([123],onError='xxx')
+    'xxx'
     """
     if is_rawtype(item):
         return item
@@ -531,4 +572,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == '--doctest':
+        import doctest
+        doctest.testmod()
+    else:
+        main()
