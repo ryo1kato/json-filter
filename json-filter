@@ -49,6 +49,7 @@ import sys
 import re
 import optparse
 import json
+import errno
 
 sys.tracebacklimit = 2
 
@@ -396,6 +397,8 @@ def print_json_pretty(obj, force=False):
             return True
     elif isinstance(obj, dict) and len(obj.keys()) == 1:
         return recurse( obj.values()[0], force )
+    elif obj == [] or obj == {}:
+        return True
     elif force:
         return False
     else:
@@ -407,7 +410,7 @@ def print_json_pretty(obj, force=False):
 ##############################################################################
 def DIE(msg):
     sys.stderr.write("ERROR: %s\n"%msg)
-    sys.exit(1)
+    exit(1)
 
 def myoptparse(argv):
     ## Option Parser
@@ -435,7 +438,7 @@ def myoptparse(argv):
         help="Print header for Comma Separated Value output.")
     parser.add_option("-i","--ignore", dest="escape",
         action="store_true", default=False,
-        help="(with --csv) Ignore error to convert CSV" +\
+        help="(with --csv) Ignore error to convert CSV " +\
              "and do not attempt to normalize data(like escape ',' in data)")
     parser.add_option("-l","--leaves", dest="leaf",
         action="store_true", default=False,
@@ -473,8 +476,7 @@ def json_filter(args):
         try:
             (myjson, leaves) = dotdictget( inputjson, dotdict )
         except DotDictNoMatch as e:
-            sys.stderr.write("No matching object found for '%s'\n"%e)
-            sys.exit(1)
+            DIE("No matching object found for '%s'\n"%e)
         except DotDictMalformed as e:
             DIE("Malformed DotDict notation: '%s' in '%s'\n" %(e, dotdict))
     else:
@@ -487,48 +489,66 @@ def json_filter(args):
     return (myjson, leaves, dotdict)
 
 
-def main():
+def main(args):
+    (opt, args) = myoptparse( args )
+    (myjson, leaves, dotdict) = json_filter(args)
+
+    if opt.leaf:
+        if len(leaves) == 1:
+            outjson = leaves[0]
+        else:
+            outjson = leaves
+    else:
+        outjson = myjson
+
+    if opt.outformat == OutFormat.CSV:
+        columns = opt.columns and opt.columns.split(',')
+        try:
+            print_csv(outjson, sys.stdout, columns,
+                      header=opt.header, escape=opt.escape)
+            return 0
+        except (CSVConvertError, CSVInvalidColumn) as e:
+            DIE(e)
+    elif opt.outformat == OutFormat.JSON:
+        print json.dumps(outjson, indent=4)
+        return 0
+    elif opt.outformat == OutFormat.Pretty:
+        if print_json_pretty(outjson, force=True):
+            pass
+        else:
+            DIE("Too complex data for '--pretty' output")
+    else:
+        print_json_pretty(outjson)
+        return 0
+
+
+def exit(ret):
+    # Work-around for http://bugs.python.org/issue11380
     try:
-        (opt, args) = myoptparse(sys.argv[1:])
-        (myjson, leaves, dotdict) = json_filter(args)
+        sys.stdout.close()
+    except:
+        pass
 
-        if opt.leaf:
-            if len(leaves) == 1:
-                outjson = leaves[0]
-            else:
-                outjson = leaves
-        else:
-            outjson = myjson
+    try:
+        sys.stderr.close()
+    except:
+        pass
 
-        if opt.outformat == OutFormat.CSV:
-            columns = opt.columns and opt.columns.split(',')
-            try:
-                print_csv(outjson, sys.stdout, columns,
-                          header=opt.header, escape=opt.escape)
-                sys.exit(0)
-            except (CSVConvertError, CSVInvalidColumn) as e:
-                DIE(e)
-        elif opt.outformat == OutFormat.JSON:
-            print json.dumps(outjson, indent=4)
-            sys.exit(0)
-        elif opt.outformat == OutFormat.Pretty:
-            if print_json_pretty(outjson, force=True):
-                pass
-            else:
-                DIE("Too complex data for '--pretty' output")
-        else:
-            print_json_pretty(outjson)
-            sys.exit(0)
+    sys.exit(ret)
 
+
+if __name__ == "__main__":
+    try:
+        exit( main( sys.argv[1:] ) )
     except KeyboardInterrupt:
-        sys.exit(1)
-
+        exit(1)
+    except IOError as e:
+        if e.errno == errno.EPIPE:
+            exit(0)
+        else:
+            DIE("IO Error: %s"%str(e))
     except Exception as e:
         if opt.verbose:
             raise
         else:
             DIE("Unhandled Internal Error: %s"%str(e))
-
-
-if __name__ == "__main__":
-    main()
