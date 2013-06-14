@@ -548,7 +548,4 @@ if __name__ == "__main__":
         else:
             DIE("IO Error: %s"%str(e))
     except Exception as e:
-        if opt.verbose:
-            raise
-        else:
-            DIE("Unhandled Internal Error: %s"%str(e))
+        DIE("Unhandled Internal Error: %s"%str(e))
