@@ -96,6 +96,20 @@ def debug(msg):
 def concat(mylist):
     return "".join(mylist)
 
+def dictmerge(x,y):
+    '''Merge nested dictionaries'''
+    # store a copy of x, but overwrite with y's values where applicable
+    merged = dict(x,**y)
+
+    # if the value of merged[key] was overwritten with y[key]'s value
+    # then we need to put back any missing x[key] values
+    for key in x.keys():
+        # if this key is a dictionary, recurse
+        if isinstance(x[key], dict) and y.has_key(key):
+            merged[key] = dictmerge(x[key],y[key])
+
+    return merged
+
 class DotDictError(Exception):
     def __init__(self, msg=''):
         if isinstance(msg, list):
@@ -194,7 +208,7 @@ def _dotdictget(myjson, dotdict, traversed=[]):
                         newpath = "." + path + rest
                         debug("NEWPATH: %s/%s"%("".join(traversed),newpath))
                         (ret, leaf) = _dotdictget(myjson, newpath, traversed)
-                        multi_expanded.update( ret )
+                        multi_expanded = dictmerge(multi_expanded, ret)
                         leaves.extend( leaf )
                     except DotDictNoMatch:
                         pass
