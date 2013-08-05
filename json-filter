@@ -50,6 +50,7 @@ import re
 import optparse
 import json
 import errno
+from collections import OrderedDict
 
 sys.tracebacklimit = 2
 
@@ -80,6 +81,8 @@ def is_number(obj):
 def is_rawtype(obj):
     return isinstance(obj, basestring) or is_number(obj)
 
+def is_mydict(obj):
+    return isinstance(obj, dict) or isinstance(obj, OrderedDict)
 
 
 ##############################################################################
@@ -99,14 +102,14 @@ def concat(mylist):
 def dictmerge(x,y):
     '''Merge nested dictionaries'''
     # store a copy of x, but overwrite with y's values where applicable
-    merged = dict(x,**y)
+    merged = OrderedDict(x,**y)
 
     # if the value of merged[key] was overwritten with y[key]'s value
     # then we need to put back any missing x[key] values
     for key in x.keys():
         # if this key is a dictionary, recurse
-        if isinstance(x[key], dict) and y.has_key(key):
-            merged[key] = dictmerge(x[key],y[key])
+        if is_mydict(x[key]) and y.has_key(key):
+                merged[key] = dictmerge(x[key],y[key])
 
     return merged
 
@@ -201,7 +204,7 @@ def _dotdictget(myjson, dotdict, traversed=[]):
                 # aggregator
                 multi = m_multi.group('multi').split(',')
                 rest  = m_multi.group('rest') or ""
-                multi_expanded = {}
+                multi_expanded = OrderedDict({})
                 leaves = []
                 for path in multi:
                     try:
@@ -222,7 +225,7 @@ def _dotdictget(myjson, dotdict, traversed=[]):
 
 def _dotdictget_dict(mydict, name, rest, traversed=[]):
     trace = traversed + ["."+name]
-    if not isinstance(mydict,dict):
+    if not is_mydict(mydict):
         raise DotDictNoMatch(trace)
 
     try:
@@ -366,7 +369,7 @@ def _print_csv_dict(myDictList, outfile,
 
     for row in myDictList:
         nrRow += 1
-        if isinstance(row, dict):
+        if is_mydict(row):
             cells = _get_cells(row, colNames, escape)
             outfile.write(",".join(cells) + '\n')
         else:
@@ -384,7 +387,7 @@ def _print_csv(mylist, outfile, columns, header=True, escape=True):
             except ValueError:
                 raise CSVInvalidColumn("Invalid column number for array: %s"%i)
         _print_csv_list(mylist, outfile, colIndices, escape)
-    elif isinstance(mylist[0], dict):
+    elif is_mydict(mylist[0]):
         colNames = columns or mylist[0].keys()
         _print_csv_dict(mylist, outfile, colNames, header, escape)
     else:
@@ -401,7 +404,7 @@ def print_csv(mylist, outfile, columns=None, header=True, escape=True):
             print_csv(mylist[0], outfile, columns, header, escape)
         else:
             _print_csv(mylist, outfile, columns, header, escape)
-    elif isinstance(mylist,dict) and len(mylist) == 1:
+    elif is_mydict(mylist) and len(mylist) == 1:
         print_csv(mylist.values()[0], outfile, columns, header, escape)
     else:
         raise CSVConvertError("Cannot convert non-list data to CSV")
@@ -439,7 +442,7 @@ def print_json_pretty(obj, force=False):
             return True
         elif len(obj) == 1:
             return recurse( obj[0], force )
-        elif all([ isinstance(i, dict) and len(i.keys()) == 1 and is_rawtype(i.values()[0])
+        elif all([ is_mydict(i) and len(i.keys()) == 1 and is_rawtype(i.values()[0])
                  for i in obj ]):
             for one_item_dict in obj:
                 print one_item_dict.values()[0]
@@ -450,7 +453,7 @@ def print_json_pretty(obj, force=False):
         else:
             print json.dumps(obj, indent=4)
             return True
-    elif isinstance(obj, dict) and len(obj.keys()) == 1:
+    elif is_mydict(obj) and len(obj.keys()) == 1:
         return recurse( obj.values()[0], force )
     elif obj == [] or obj == {}:
         return True
