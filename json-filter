@@ -315,6 +315,8 @@ def _get_cells(row, indices_or_keys, escape):
                     cells.append( _escape_csv_cell(row[ik], escape) )
                 elif is_rawtype(row[ik]):
                     cells.append(row[ik])
+                elif row[ik] is None:
+                    cells.append("")
                 else:
                     msg = "cannot convert to value: %s"%str(row[ik])
                     raise CSVConvertError(msg)
