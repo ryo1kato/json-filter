@@ -264,10 +264,7 @@ def _dotdictget_list(mylist, index_s, rest, traversed=[]):
                     leaves.extend( leaf )
                 except DotDictNoMatch:
                     pass
-            if list_expanded:
-                return (list_expanded, leaves)
-            else:
-                raise DotDictNoMatch(trace)
+            return (list_expanded, leaves)
         else:
             index = int(index_s)
             try:
