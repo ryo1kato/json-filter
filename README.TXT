@@ -1,6 +1,6 @@
 json-filter - Command-line JSON manipulation tool like JSONPath/XPath
 
-                                            2012-12-06
+                                            2014-08-03
                                             Ryoichi KATO <ryo1kato@gmail.com>
 
 ABOUT
@@ -11,8 +11,8 @@ ABOUT
   - Keep original JSON structure as much as possible for output.
   - Implicit array expansion - You can ommit '[*]'
   - Shell like "name1.{name2a,name2b}.name3" and "name1.*.name3" expansion.
+    - Partial wildcard is not supported.
   - Conditions are NOT supported (yet)
-  - CSV output is NOT implemented yet.
 
 
 SEE ALSO
@@ -21,7 +21,7 @@ SEE ALSO
 
 LICENSE
   The MIT License (MIT)
-  Copyright © 2012 Ryoichi KATO
+  Copyright © 2012-2014 Ryoichi KATO
 
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the 'Software'),

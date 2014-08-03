@@ -488,18 +488,18 @@ def myoptparse(argv):
         action="store_const", dest="outformat", const=OutFormat.JSON,
         help="Always output in JSON format")
     parser.add_option("-C","--cols", dest="columns",
-        help="(with --csv) output only selected columns" +\
+        help="(with --csv) only output selected columns " +\
              "sparated by commna(',')", metavar="COL1,COL2,...")
     parser.add_option("-H", "--no-csv-header", dest='header',
         action="store_false", default=True,
-        help="Print header for Comma Separated Value output.")
+        help="Do not print header for Comma-Separated-Value output.")
     parser.add_option("-i","--ignore", dest="escape",
         action="store_true", default=False,
-        help="(with --csv) Ignore error to convert CSV " +\
-             "and do not attempt to normalize data(like escape ',' in data)")
+        help="(with --csv) Ignore error when converting to CSV, " +\
+             "and do not attempt to normalize data (like escape ',' in data)")
     parser.add_option("-l","--leaves", dest="leaf",
         action="store_true", default=False,
-        help="output leaf nodes filtered by dotdit, instead of root")
+        help="Only output leaf nodes filtered by dotdict")
     parser.add_option("-v","--verbose",
         action="store_true", default=False,
         help="Verbose output")
